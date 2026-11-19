@@ -1,0 +1,8 @@
+Package: com.zjx.zxtouch.receiver-probe
+Name: ZXTouch UIKit Receiver Probe
+Version: 0.1
+Architecture: iphoneos-arm64
+Depends: firmware (>= 15.0)
+Description: Public UIKit touch receiver for mixed input diagnostics; no process injection
+Maintainer: ZXTouch contributors
+Section: Development

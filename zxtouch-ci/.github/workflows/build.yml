@@ -1,0 +1,10 @@
+# Legacy entry point delegates to the same unvalidated full test build.
+# There is deliberately no tag-triggered release publishing for this branch.
+name: Build ZXTouch experimental package
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  full-rootless-candidate:
+    uses: ./.github/workflows/touch-diagnostics.yml

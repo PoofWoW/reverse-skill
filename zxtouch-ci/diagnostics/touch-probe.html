@@ -1,0 +1,55 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>ZXTouch receiver probe</title>
+<style>
+html,body{margin:0;background:#101824;color:#eef;font:16px system-ui;overscroll-behavior:none}
+header{padding:12px}button{font:inherit;padding:8px}#stage{width:100%;height:52vh;display:block;background:#203348;touch-action:none}
+pre{white-space:pre-wrap;overflow:auto;max-height:22vh;margin:12px;font:12px monospace}p{margin:8px 0}
+</style>
+<header><b>App-visible Touch Events only</b><p id="status">touches=0 · peak=0</p>
+<button id="reset">Reset</button> <button id="export">Export JSON</button>
+<p>Keep all fingers inside the blue area. Disable ZXTouch indicator. Circles below are drawn ONLY from event.touches; pointer counts are separate.</p></header>
+<canvas id="stage"></canvas><pre id="tail"></pre>
+<script>
+'use strict';
+const stage = document.querySelector('#stage'), ctx = stage.getContext('2d');
+const statusEl = document.querySelector('#status'), tail = document.querySelector('#tail');
+let rows = [], peak = 0, dropped = 0, active = [], pointers = new Set();
+const pack = list => Array.from(list, t => ({id:t.identifier,x:t.clientX,y:t.clientY,target:t.target.id||t.target.tagName}));
+function log(row) {
+  rows.push({wall:new Date().toISOString(),now:performance.now(),...row});
+  if (rows.length > 5000) { rows.shift(); dropped++; }
+  tail.textContent = rows.slice(-5).map(r=>JSON.stringify(r)).join('\n');
+}
+function draw() {
+  const rect=stage.getBoundingClientRect(), dpr=window.devicePixelRatio||1;
+  stage.width=Math.round(rect.width*dpr); stage.height=Math.round(rect.height*dpr);
+  ctx.scale(dpr,dpr); ctx.font='16px monospace';
+  active.forEach(t=>{const x=t.x-rect.left,y=t.y-rect.top;
+    ctx.fillStyle=`hsl(${(t.id*137)%360} 80% 65%)`;ctx.beginPath();ctx.arc(x,y,24,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle='#fff';ctx.fillText(`id ${t.id}`,x+28,y);
+  });
+}
+['touchstart','touchmove','touchend','touchcancel'].forEach(type=>stage.addEventListener(type,e=>{
+  e.preventDefault(); active=pack(e.touches);peak=Math.max(peak,active.length);
+  log({type,stamp:e.timeStamp,trusted:e.isTrusted,touches:active,targetTouches:pack(e.targetTouches),changedTouches:pack(e.changedTouches)});
+  statusEl.textContent=`touches=${active.length} · peak=${peak} · IDs=[${active.map(t=>t.id)}] · dropped=${dropped}`; draw();
+},{passive:false}));
+['pointerdown','pointermove','pointerup','pointercancel'].forEach(type=>stage.addEventListener(type,e=>{
+  if(type==='pointerdown') pointers.add(e.pointerId);
+  if(type==='pointerup'||type==='pointercancel') pointers.delete(e.pointerId);
+  log({type,pointerId:e.pointerId,isPrimary:e.isPrimary,pointerType:e.pointerType,pointerCount:pointers.size,x:e.clientX,y:e.clientY});
+}));
+document.querySelector('#reset').onclick=()=>{
+  if(active.length) return alert('Lift all fingers before reset.');
+  rows=[];peak=0;dropped=0;pointers.clear();tail.textContent='';statusEl.textContent='touches=0 · peak=0';draw();
+};
+document.querySelector('#export').onclick=()=>{
+  const payload={schema:1,layer:'WebKit DOM Touch Events (not HID)',userAgent:navigator.userAgent,screen:{width:screen.width,height:screen.height,dpr:devicePixelRatio},peak,dropped,rows};
+  const url=URL.createObjectURL(new Blob([JSON.stringify(payload,null,2)],{type:'application/json'}));
+  const a=document.createElement('a');a.href=url;a.download='zxtouch-receiver-'+Date.now()+'.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),10000);
+};
+['blur','pagehide'].forEach(type=>window.addEventListener(type,()=>{log({type,activeBefore:active});active=[];pointers.clear();statusEl.textContent='Interrupted — reset before next trial';draw();}));
+window.addEventListener('resize',()=>{log({type:'resize'});draw();});draw();
+</script>
